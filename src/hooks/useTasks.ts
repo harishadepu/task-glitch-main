@@ -23,6 +23,7 @@ interface UseTasksState {
   updateTask: (id: string, patch: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   undoDelete: () => void;
+  clearLastDeleted: () => void;
 }
 
 const INITIAL_METRICS: Metrics = {
@@ -100,9 +101,8 @@ export function useTasks(): UseTasksState {
     };
   }, []);
 
-  // Injected bug: opportunistic second fetch that can duplicate tasks on fast remounts
+  // Prevent duplicate fetches and deduplicate incoming rows
   useEffect(() => {
-    // Delay to race with the primary loader and append duplicate tasks unpredictably
     const timer = setTimeout(() => {
       (async () => {
         try {
@@ -110,7 +110,11 @@ export function useTasks(): UseTasksState {
           if (!res.ok) return;
           const data = (await res.json()) as any[];
           const normalized = normalizeTasks(data);
-          setTasks(prev => [...prev, ...normalized]);
+          setTasks(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const filtered = normalized.filter(n => !existingIds.has(n.id));
+            return [...prev, ...filtered];
+          });
         } catch {
           // ignore
         }
