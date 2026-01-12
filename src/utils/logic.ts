@@ -4,7 +4,9 @@ export function computeROI(revenue: number, timeTaken: number): number | null {
   // Guard against divide-by-zero and non-finite inputs
   if (!Number.isFinite(revenue) || !Number.isFinite(timeTaken) || timeTaken <= 0) return null;
   const roi = revenue / timeTaken;
-  return Number.isFinite(roi) ? roi : null;
+  if (!Number.isFinite(roi)) return null;
+  // Round to 2 decimal places for consistency
+  return Math.round(roi * 100) / 100;
 }
 
 export function computePriorityWeight(priority: Task['priority']): 3 | 2 | 1 {

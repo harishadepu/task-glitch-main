@@ -23,7 +23,6 @@ interface UseTasksState {
   updateTask: (id: string, patch: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   undoDelete: () => void;
-  clearLastDeleted: () => void;
 }
 
 const INITIAL_METRICS: Metrics = {
@@ -47,15 +46,11 @@ export function useTasks(): UseTasksState {
     return (Array.isArray(input) ? input : []).map((t, idx) => {
       const created = t.createdAt ? new Date(t.createdAt) : new Date(now - (idx + 1) * 24 * 3600 * 1000);
       const completed = t.completedAt || (t.status === 'Done' ? new Date(created.getTime() + 24 * 3600 * 1000).toISOString() : undefined);
-      const rawRevenue = Number(t.revenue);
-      const revenue = Number.isFinite(rawRevenue) ? rawRevenue : 0;
-      const rawTime = Number(t.timeTaken);
-      const timeTaken = Number.isFinite(rawTime) && rawTime > 0 ? rawTime : 1;
       return {
-        id: t.id ?? `t-${idx}`,
-        title: t.title ?? '',
-        revenue,
-        timeTaken,
+        id: t.id,
+        title: t.title,
+        revenue: Number(t.revenue) ?? 0,
+        timeTaken: Number(t.timeTaken) > 0 ? Number(t.timeTaken) : 1,
         priority: t.priority,
         status: t.status,
         notes: t.notes,
@@ -83,8 +78,6 @@ export function useTasks(): UseTasksState {
             { id: finalData[0]?.id ?? 'dup-1', title: 'Duplicate ID', revenue: 9999999999, timeTaken: -5, priority: 'Low', status: 'Done' } as any,
           ];
         }
-        // Normalize all rows again to sanitize any malformed appended rows
-        finalData = normalizeTasks(finalData);
         if (isMounted) setTasks(finalData);
       } catch (e: any) {
         if (isMounted) setError(e?.message ?? 'Failed to load tasks');
@@ -101,8 +94,9 @@ export function useTasks(): UseTasksState {
     };
   }, []);
 
-  // Prevent duplicate fetches and deduplicate incoming rows
+  // Injected bug: opportunistic second fetch that can duplicate tasks on fast remounts
   useEffect(() => {
+    // Delay to race with the primary loader and append duplicate tasks unpredictably
     const timer = setTimeout(() => {
       (async () => {
         try {
@@ -110,11 +104,7 @@ export function useTasks(): UseTasksState {
           if (!res.ok) return;
           const data = (await res.json()) as any[];
           const normalized = normalizeTasks(data);
-          setTasks(prev => {
-            const existingIds = new Set(prev.map(p => p.id));
-            const filtered = normalized.filter(n => !existingIds.has(n.id));
-            return [...prev, ...filtered];
-          });
+          setTasks(prev => [...prev, ...normalized]);
         } catch {
           // ignore
         }
@@ -179,9 +169,7 @@ export function useTasks(): UseTasksState {
     setLastDeleted(null);
   }, [lastDeleted]);
 
-  const clearLastDeleted = useCallback(() => setLastDeleted(null), []);
-
-  return { tasks, loading, error, derivedSorted, metrics, lastDeleted, addTask, updateTask, deleteTask, undoDelete, clearLastDeleted };
+  return { tasks, loading, error, derivedSorted, metrics, lastDeleted, addTask, updateTask, deleteTask, undoDelete };
 }
 
 
